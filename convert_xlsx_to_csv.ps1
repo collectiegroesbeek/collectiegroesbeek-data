@@ -1,7 +1,7 @@
 # Powershell script that converts Excel files to csv.
 # The csv output is Tab delimited UTF-16LE with leading Byte Order Mark.
 
-# Put in the path here:
+# Put in the full path here:
 $path = ''
 
 $excel = new-object -ComObject "Excel.Application"
