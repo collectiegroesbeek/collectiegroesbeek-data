@@ -1,6 +1,7 @@
      @@ -0,0 +1,107 @@
 # Custom
 .idea/
+*.xlsx
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
