@@ -8,7 +8,7 @@ def main():
         if filename.endswith('.xlsx'):
             print(f'Converting {filename} to csv')
             filename_csv = filename.replace('.xlsx', '.csv')
-            Xlsx2csv(filename, outputencoding='utf-8').convert(filename_csv)
+            Xlsx2csv(filename, outputencoding='utf-8', skip_empty_lines=True).convert(filename_csv)
 
 
 if __name__ == '__main__':
