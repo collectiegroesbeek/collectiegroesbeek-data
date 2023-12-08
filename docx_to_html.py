@@ -1,5 +1,6 @@
 import argparse
 import os
+from posixpath import join
 import re
 from typing import Optional, List
 
@@ -8,18 +9,18 @@ from mammoth.cli import ImageWriter
 from tqdm import tqdm
 
 
-def main(path: str, html_path: str, image_path: str):
+def main(path: str, html_path: str, image_path: str, image_path_static: str):
     filenames = sorted(os.listdir(path))
     pbar = tqdm(filenames)
     for filename in pbar:
         if filename.endswith(".docx"):
             pbar.set_postfix(filename=filename)
             new_filename = filename.lower().replace(".docx", "").replace(" ", "_")
-            _image_path = os.path.join(image_path, new_filename)
+            _image_path = join(image_path, new_filename)
             if not os.path.exists(_image_path):
                 os.makedirs(_image_path)
             image_converter = mammoth.images.img_element(ImageWriter(_image_path))
-            with open(os.path.join(path, filename), "rb") as docx_file:
+            with open(join(path, filename), "rb") as docx_file:
                 result = mammoth.convert(
                     docx_file,
                     convert_image=image_converter,
@@ -32,8 +33,9 @@ def main(path: str, html_path: str, image_path: str):
             text = clean(text)
             lines = Concatenator().concatenate(text)
             text = tag_html(lines)
-            text = fix_img_path(text, image_path=_image_path)
-            filepath_html = os.path.join(html_path, new_filename + ".html")
+            _image_path_static = join(image_path_static, new_filename)
+            text = fix_img_path(text, image_path=_image_path_static)
+            filepath_html = join(html_path, new_filename + ".html")
             with open(filepath_html, "w", encoding="utf-8") as f:
                 f.write(text)
 
@@ -207,7 +209,7 @@ def letter_to_integer(value: str) -> int:
 
 
 def fix_img_path(text: str, image_path: str) -> str:
-    text = text.replace("<img src=\"", f"<img src=\"{image_path}/")
+    text = re.sub(r"<img\s+src=\"", f"<img src=\"{image_path}/", text)
     return text
 
 
@@ -216,6 +218,12 @@ if __name__ == "__main__":
     parser.add_argument('--path', help='Folder with docx files with publications.')
     parser.add_argument("--html-path", help="html output path")
     parser.add_argument("--image-path", help="path to store images")
+    parser.add_argument("--image-path-static", help="static path for images used in html")
     options = parser.parse_args()
 
-    main(path=options.path, html_path=options.html_path, image_path=options.image_path)
+    main(
+        path=options.path,
+        html_path=options.html_path,
+        image_path=options.image_path,
+        image_path_static=options.image_path_static,
+    )
