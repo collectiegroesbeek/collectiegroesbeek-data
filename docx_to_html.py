@@ -74,8 +74,9 @@ class Concatenator:
     def concatenate(self, text: str) -> List[str]:
         parts = text.split("</p><p>")
         for i, part in enumerate(parts):
-            part_is_empty = len(part) == 0
+            part_is_empty = len(part.strip()) == 0
             if part_is_empty:
+                self.flush()
                 continue
 
             is_image = part.startswith("<img ") and part.endswith(">")
@@ -92,9 +93,23 @@ class Concatenator:
 
             is_numbered_list = re.search(re_ordered_list, part) is not None
             is_title = i == 0
-            is_heading = part.startswith("<strong>") and part.endswith("</strong>")
+            is_heading = (
+                    (
+                        re.match(r"<strong>[,\w\d\s-]+<\/strong>[.\s]?", part) is not None
+                        or part.isupper()
+                    )
+                    and i != len(parts) - 1
+            )
             if is_numbered_list or is_title or is_heading:
                 self.flush()
+            if is_title or is_heading:
+                part = part.replace("<strong>", "").replace("</strong>", "")
+                if part.isupper():
+                    part = part.title()
+            if is_title:
+                part = "<h1>" + part + "</h1>"
+            elif is_heading:
+                part = "<h2>" + part + "</h2>"
 
             previous_ends_with_hyphen = (
                 i > 0 and re.search(re_ends_with_hyphen, parts[i - 1]) is not None
