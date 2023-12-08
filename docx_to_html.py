@@ -129,7 +129,7 @@ class Concatenator:
                 is_title
                 or is_heading
                 or is_image
-                or (part_ends_with_punctiation and next_part_starts_with_capital_letter)
+                or ((part_ends_with_punctiation or i < 5) and next_part_starts_with_capital_letter)
             ):
                 self.flush()
         self.flush()
