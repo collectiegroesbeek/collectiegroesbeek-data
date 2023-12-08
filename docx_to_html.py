@@ -15,7 +15,7 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
     for filename in pbar:
         if filename.endswith(".docx"):
             pbar.set_postfix(filename=filename)
-            new_filename = filename.lower().replace(".docx", "").replace(" ", "_")
+            new_filename = filename.replace(".docx", "")
             _image_path = join(image_path, new_filename)
             if not os.path.exists(_image_path):
                 os.makedirs(_image_path)
