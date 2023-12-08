@@ -19,6 +19,7 @@ def main():
                 )
                 text = result.value
                 text = replace_characters(text)
+                text = clean(text)
                 text = Concatenator().concatenate(text)
                 with open("out.html", "w", encoding="utf-8") as f:
                     f.write(text)
@@ -36,6 +37,11 @@ def replace_characters(text: str) -> str:
     text = text.replace("½", "&frac12;")
     text = text.replace("⅓", "&frac13;")
     text = text.replace("ë", "&euml;")
+    return text
+
+
+def clean(text: str) -> str:
+    text = text.replace("<strong> </strong>", " ")
     return text
 
 
