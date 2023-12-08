@@ -1,30 +1,41 @@
+import argparse
 import os
 import re
 from typing import Optional, List
 
 import mammoth
 from mammoth.cli import ImageWriter
+from tqdm import tqdm
 
 
-def main():
-    path = r"D:\Dropbox\Anemashare\2023-11-29 publicaties Coll Groesbeek"
-    image_converter = mammoth.images.img_element(ImageWriter("."))
-    for filename in ["Tedingh van Cranenburg.docx"]:  # sorted(os.listdir(path)):
+def main(path: str, html_path: str, image_path: str):
+    filenames = sorted(os.listdir(path))
+    pbar = tqdm(filenames)
+    for filename in pbar:
         if filename.endswith(".docx"):
+            pbar.set_postfix(filename=filename)
+            new_filename = filename.lower().replace(".docx", "").replace(" ", "_")
+            _image_path = os.path.join(image_path, new_filename)
+            if not os.path.exists(_image_path):
+                os.makedirs(_image_path)
+            image_converter = mammoth.images.img_element(ImageWriter(_image_path))
             with open(os.path.join(path, filename), "rb") as docx_file:
                 result = mammoth.convert(
                     docx_file,
                     convert_image=image_converter,
                     output_format="html",
                 )
-                text = result.value
-                text = replace_characters(text)
-                text = clean(text)
-                text = Concatenator().concatenate(text)
-                with open("out.html", "w", encoding="utf-8") as f:
-                    f.write(text)
-                a = 1
-                break
+            if len(os.listdir(_image_path)) == 0:
+                os.rmdir(_image_path)
+            text = result.value
+            text = replace_characters(text)
+            text = clean(text)
+            lines = Concatenator().concatenate(text)
+            text = tag_html(lines)
+            text = fix_img_path(text, image_path=_image_path)
+            filepath_html = os.path.join(html_path, new_filename + ".html")
+            with open(filepath_html, "w", encoding="utf-8") as f:
+                f.write(text)
 
 
 def replace_characters(text: str) -> str:
@@ -195,5 +206,16 @@ def letter_to_integer(value: str) -> int:
     return ord(value.lower()) - ord("a") + 1
 
 
+def fix_img_path(text: str, image_path: str) -> str:
+    text = text.replace("<img src=\"", f"<img src=\"{image_path}/")
+    return text
+
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--path', help='Folder with docx files with publications.')
+    parser.add_argument("--html-path", help="html output path")
+    parser.add_argument("--image-path", help="path to store images")
+    options = parser.parse_args()
+
+    main(path=options.path, html_path=options.html_path, image_path=options.image_path)
