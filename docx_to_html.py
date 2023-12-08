@@ -46,6 +46,7 @@ def clean(text: str) -> str:
 
 
 re_ends_with_hyphen = re.compile(r"(?<=\w)-\s?$")
+re_ordered_list = re.compile(r"^(\d+|[IVX]|[a-z])[).]\s")
 
 
 class Concatenator:
@@ -53,6 +54,7 @@ class Concatenator:
         self.out = []
         self.paragraph = []
         self.image_buffer: Optional[str] = None
+        self.is_in_numbered_list = False
 
     def concatenate(self, text: str) -> str:
         parts = text.split("</p><p>")
@@ -67,11 +69,27 @@ class Concatenator:
                 self.image_buffer = part
                 continue
 
-            is_numbered_list = re.search(r"^\d+\)\s", part) is not None
+            if i == 0 and part.startswith("<p>"):
+                part = part[3:]
+            elif i == len(parts) - 1 and part.endswith("</p>"):
+                part = part[:-4]
+
+            is_numbered_list = re.search(re_ordered_list, part) is not None
             is_title = i == 0
             is_heading = part.startswith("<strong>") and part.endswith("</strong>")
             if is_numbered_list or is_title or is_heading:
                 self.flush()
+
+            if is_numbered_list:
+                part = re.sub(re_ordered_list, r"<li value='\g<1>'>", part) + "</li>"
+                if not self.is_in_numbered_list:
+                    self.is_in_numbered_list = True
+                    self.out.append("<ol>")
+                self.out.append(part)
+                continue
+            elif not is_numbered_list and self.is_in_numbered_list:
+                self.is_in_numbered_list = False
+                self.out.append("</ol>")
 
             previous_ends_with_hyphen = (
                 i > 0 and re.search(re_ends_with_hyphen, parts[i - 1]) is not None
@@ -83,7 +101,7 @@ class Concatenator:
             else:
                 self.paragraph.append(part)
 
-            part_ends_with_punctiation = re.search(r"[.!?]\s?$", part) is not None
+            part_ends_with_punctiation = re.search(r"[.!?:]\s?$", part) is not None
             next_part_starts_with_capital_letter = (
                 i < len(parts) - 1 and parts[i + 1][0].isupper()
             )
@@ -94,15 +112,15 @@ class Concatenator:
                 or (part_ends_with_punctiation and next_part_starts_with_capital_letter)
             ):
                 self.flush()
-            if "<img " in part:
-                a = 1
         self.flush()
-        result = "</p><p>".join(self.out)
+        result = "".join(self.out)
         return result
 
     def flush(self):
-        self.out.append("".join(self.paragraph).strip())
-        self.paragraph = []
+        if self.paragraph:
+            paragraph_str = "".join(self.paragraph).strip()
+            self.out.append("<p>" + paragraph_str + "</p>")
+            self.paragraph = []
         if self.image_buffer is not None:
             self.out.append(self.image_buffer)
             self.image_buffer = None
