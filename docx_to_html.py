@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Optional
+from typing import Optional, List
 
 import mammoth
 from mammoth.cli import ImageWriter
@@ -30,6 +30,7 @@ def main():
 def replace_characters(text: str) -> str:
     text = text.replace("„", "&bdquo;")
     text = text.replace("”", "&rdquo;")
+    text = text.replace("“", "&ldquo;")
     text = text.replace("±", "&#177;")
     text = text.replace("é", "&eacute;")
     text = text.replace("†", "&dagger;")
@@ -46,17 +47,18 @@ def clean(text: str) -> str:
 
 
 re_ends_with_hyphen = re.compile(r"(?<=\w)-\s?$")
-re_ordered_list = re.compile(r"^(\d+|[IVX]|[a-z])[).]\s")
+re_ordered_list = re.compile(r"^(\d+|[IVX]+|[a-z])[).]\s")
 
 
 class Concatenator:
-    def __init__(self):
-        self.out = []
-        self.paragraph = []
-        self.image_buffer: Optional[str] = None
-        self.is_in_numbered_list = False
+    """Make sure lines are concatenated properly."""
 
-    def concatenate(self, text: str) -> str:
+    def __init__(self):
+        self.out: List[str] = []
+        self.line: List[str] = []
+        self.image_buffer: Optional[str] = None
+
+    def concatenate(self, text: str) -> List[str]:
         parts = text.split("</p><p>")
         for i, part in enumerate(parts):
             part_is_empty = len(part) == 0
@@ -65,7 +67,8 @@ class Concatenator:
 
             is_image = part.startswith("<img ") and part.endswith(">")
             if is_image:
-                part = part.replace(">", " style='max-width:100%; height:auto;'>")
+                part = part.replace("/>", " style='max-width:100%; height:auto;' />")
+                part = re.sub(r'alt="[\w\s,]+"', "", part)
                 self.image_buffer = part
                 continue
 
@@ -80,28 +83,17 @@ class Concatenator:
             if is_numbered_list or is_title or is_heading:
                 self.flush()
 
-            if is_numbered_list:
-                part = re.sub(re_ordered_list, r"<li value='\g<1>'>", part) + "</li>"
-                if not self.is_in_numbered_list:
-                    self.is_in_numbered_list = True
-                    self.out.append("<ol>")
-                self.out.append(part)
-                continue
-            elif not is_numbered_list and self.is_in_numbered_list:
-                self.is_in_numbered_list = False
-                self.out.append("</ol>")
-
             previous_ends_with_hyphen = (
                 i > 0 and re.search(re_ends_with_hyphen, parts[i - 1]) is not None
             )
             if previous_ends_with_hyphen:
-                self.paragraph[-1] = re.sub(
-                    re_ends_with_hyphen, part, self.paragraph[-1]
+                self.line[-1] = re.sub(
+                    re_ends_with_hyphen, part, self.line[-1]
                 )
             else:
-                self.paragraph.append(part)
+                self.line.append(part)
 
-            part_ends_with_punctiation = re.search(r"[.!?:]\s?$", part) is not None
+            part_ends_with_punctiation = re.search(r"[.!?]\s?$", part) is not None
             next_part_starts_with_capital_letter = (
                 i < len(parts) - 1 and parts[i + 1][0].isupper()
             )
@@ -113,17 +105,94 @@ class Concatenator:
             ):
                 self.flush()
         self.flush()
-        result = "".join(self.out)
-        return result
+        return self.out
 
     def flush(self):
-        if self.paragraph:
-            paragraph_str = "".join(self.paragraph).strip()
-            self.out.append("<p>" + paragraph_str + "</p>")
-            self.paragraph = []
+        if self.line:
+            self.out.append("".join(self.line).strip())
+            self.line = []
         if self.image_buffer is not None:
             self.out.append(self.image_buffer)
             self.image_buffer = None
+
+
+def tag_html(lines: List[str]) -> str:
+    out: List[str] = []
+    numbered_list_types = []
+
+    for i, part in enumerate(lines):
+        assert len(part) != 0
+
+        if part.startswith(("<img ", "<ul", "<ol", "<li")):
+            out.append(part)
+            continue
+
+        match_numbered_list = re.search(re_ordered_list, part)
+        is_numbered_list = match_numbered_list is not None
+        if is_numbered_list:
+            list_index_str = match_numbered_list.group(1)
+            if list_index_str.isnumeric():
+                list_type = "decimal"
+                list_index = int(list_index_str)
+            elif is_uppercase_roman_numeral(list_index_str):
+                list_type = "upper-roman"
+                list_index = roman_numeral_to_integer(list_index_str)
+            elif list_index_str.isalpha():
+                list_type = "lower-alpha"
+                list_index = letter_to_integer(list_index_str)
+            else:
+                raise ValueError(f"Unknown list type: {list_index_str}")
+            if numbered_list_types:
+                if list_type not in numbered_list_types:
+                    # start a deeper level
+                    out.append("<ol>")
+                    numbered_list_types.append(list_type)
+                elif list_type == numbered_list_types[-1]:
+                    # continue on the same level
+                    pass
+                else:
+                    # end a level
+                    out.append("</ol>")
+                    numbered_list_types.pop()
+            else:
+                numbered_list_types.append(list_type)
+                out.append("<ol>")
+            part = re.sub(re_ordered_list, "", part)
+            part = f'<li value="{list_index}" style="list-style-type:{list_type}">{part}</li>'
+            out.append(part)
+            continue
+        elif not is_numbered_list and numbered_list_types:
+            for _ in range(len(numbered_list_types)):
+                out.append("</ol>")
+            numbered_list_types = []
+
+        out.append("<p>" + part + "</p>")
+
+    result = "\n".join(out)
+    return result
+
+
+def is_uppercase_roman_numeral(value: str) -> bool:
+    return not bool(set(value) - set("IVX"))
+
+
+def roman_numeral_to_integer(value: str) -> int:
+    return {
+        "I": 1,
+        "II": 2,
+        "III": 3,
+        "IV": 4,
+        "V": 5,
+        "VI": 6,
+        "VII": 7,
+        "VIII": 8,
+        "IX": 9,
+        "X": 10,
+    }[value.upper()]
+
+
+def letter_to_integer(value: str) -> int:
+    return ord(value.lower()) - ord("a") + 1
 
 
 if __name__ == "__main__":
