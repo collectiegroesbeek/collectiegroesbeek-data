@@ -13,7 +13,7 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
     filenames = sorted(os.listdir(path))
     pbar = tqdm(filenames)
     for filename in pbar:
-        if filename.endswith(".docx"):
+        if filename.endswith(".docx") and "Teding" in filename:
             pbar.set_postfix(filename=filename)
             new_filename = filename.replace(".docx", "")
             _image_path = join(image_path, new_filename)
@@ -32,7 +32,9 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
             text = replace_characters(text)
             text = clean(text)
             lines = Concatenator().concatenate(text)
-            text = tag_html(lines)
+            lines = tag_html(lines)
+            lines = convert_footnotes(lines)
+            text = "\n".join(lines)
             _image_path_static = join(image_path_static, new_filename)
             text = fix_img_path(text, image_path=_image_path_static)
             filepath_html = join(html_path, new_filename + ".html")
@@ -144,7 +146,7 @@ class Concatenator:
             self.image_buffer = None
 
 
-def tag_html(lines: List[str]) -> str:
+def tag_html(lines: list[str]) -> list[str]:
     out: List[str] = []
     numbered_list_types = []
 
@@ -196,8 +198,7 @@ def tag_html(lines: List[str]) -> str:
 
         out.append("<p>" + part + "</p>")
 
-    result = "\n".join(out)
-    return result
+    return out
 
 
 def is_uppercase_roman_numeral(value: str) -> bool:
@@ -226,6 +227,25 @@ def letter_to_integer(value: str) -> int:
 def fix_img_path(text: str, image_path: str) -> str:
     text = re.sub(r"<img\s+src=\"", f"<img src=\"{image_path}/", text)
     return text
+
+
+def convert_footnotes(lines: list[str]) -> list[str]:
+    out_inverted: List[str] = []
+    footnote_indexes: set[str] = set()
+    finding_footnotes = True
+    for line in lines[::-1]:
+        match_footnote = re.search(r'^<li value="(\d+)" ', line)
+        if match_footnote is None:
+            finding_footnotes = False
+        elif finding_footnotes:
+            footnote_index = match_footnote.group(1)
+            line = line.replace("<li ", f'<li id="footnote-{footnote_index}" ')
+            if footnote_index in footnote_indexes:
+                raise ValueError(f"Duplicate footnote: {footnote_index}")
+            footnote_indexes.add(footnote_index)
+        out_inverted.append(line)
+
+    return out_inverted[::-1]
 
 
 if __name__ == "__main__":
