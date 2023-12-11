@@ -40,6 +40,7 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
             lines = convert_footnotes(lines)
             lines = fix_images(lines, image_path=join(image_path_static, new_filename))
             text = "\n".join(lines)
+            text = re.sub(r"\s+", " ", text)
 
             filepath_json = join(html_path, new_filename + ".json")
             filepath_html = join(html_path, new_filename + ".html")
@@ -152,7 +153,7 @@ class Concatenator:
 
     def flush(self):
         if self.line:
-            self.out.append("".join(self.line).strip())
+            self.out.append(" ".join(self.line).strip())
             self.line = []
         if self.image_buffer is not None:
             self.out.append(self.image_buffer)
@@ -255,21 +256,43 @@ def fix_images(lines: list[str], image_path: str) -> list[str]:
 
 def convert_footnotes(lines: list[str]) -> list[str]:
     out_inverted: List[str] = []
-    footnote_indexes: set[str] = set()
+    footnotes: dict[int, str] = {}
     finding_footnotes = True
     for line in lines[::-1]:
-        match_footnote = re.search(r'^<li value="(\d+)" ', line)
-        if match_footnote is None:
+        match = re.search(r'^<li value="(\d+)"[^>]+>(.+)</li>$', line)
+        if match is None:
             finding_footnotes = False
         elif finding_footnotes:
-            footnote_index = match_footnote.group(1)
+            footnote_index = int(match.group(1))
+            footnote_text = match.group(2)
             line = line.replace("<li ", f'<li id="footnote-{footnote_index}" ')
-            if footnote_index in footnote_indexes:
+            if footnote_index in footnotes:
                 raise ValueError(f"Duplicate footnote: {footnote_index}")
-            footnote_indexes.add(footnote_index)
+            footnotes[footnote_index] = footnote_text
         out_inverted.append(line)
 
-    return out_inverted[::-1]
+    def func(_match: re.Match[str]) -> str:
+        idx = int(_match.group(1))
+        suffix = _match.group(2)
+        for i in range(1, 4):
+            if idx == min(footnotes.keys()):
+                break
+            if idx == min(footnotes.keys()) + i:
+                # we are skipping some footnote
+                for _ in range(i):
+                    footnotes.pop(min(footnotes.keys()))
+        if idx != min(footnotes.keys()) or idx not in footnotes:
+            return str(_match.group(0))
+        text = footnotes.pop(idx)
+        return f' <a href="#footnote-{idx}" title="{text}">[{idx}]</a>{suffix}'
+
+    out = []
+    for line in out_inverted[::-1]:
+        # Replace references to footnotes with links
+        line = re.sub(r" (\d{1,3})\)([\s.,])", func, line)
+        out.append(line)
+
+    return out
 
 
 if __name__ == "__main__":
