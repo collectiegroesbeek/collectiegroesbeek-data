@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 from posixpath import join
 import re
@@ -31,11 +32,15 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
             text = result.value
             text = replace_characters(text)
             text = clean(text)
+            metadata, text = extract_metadata(text)
             lines = Concatenator().concatenate(text)
             text = tag_html(lines)
             _image_path_static = join(image_path_static, new_filename)
             text = fix_img_path(text, image_path=_image_path_static)
+            filepath_json = join(html_path, new_filename + ".json")
             filepath_html = join(html_path, new_filename + ".html")
+            with open(filepath_json, "w") as f:
+                json.dump(metadata, f)
             with open(filepath_html, "w", encoding="utf-8") as f:
                 f.write(text)
 
@@ -61,6 +66,22 @@ def clean(text: str) -> str:
 
 re_ends_with_hyphen = re.compile(r"(?<=\w)-\s?$")
 re_ordered_list = re.compile(r"^(\d+|[IVX]+|[a-z])[).]\s")
+
+
+def extract_metadata(text: str) -> tuple[dict[str, str], str]:
+    metadata: dict[str, str] = {}
+    for field, regex in [
+        ("titel", r"^<p>Titel: ([^<]+)</p>"),
+        ("jaar", r"^<p>Jaar: ([^<]+)</p>"),
+        ("omschrijving", r"^<p>Omschrijving: ([^<]+)</p>"),
+    ]:
+        match = re.search(regex, text)
+        if match is not None:
+            metadata[field] = match.group(1)
+        else:
+            metadata[field] = ""
+        text = re.sub(regex, "", text)
+    return metadata, text
 
 
 class Concatenator:
