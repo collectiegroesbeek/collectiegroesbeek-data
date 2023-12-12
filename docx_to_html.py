@@ -37,8 +37,10 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
 
             lines = Concatenator().concatenate(text)
             lines = tag_html(lines)
+            lines = convert_footnotes(lines)
             lines = fix_images(lines, image_path=join(image_path_static, new_filename))
             text = "\n".join(lines)
+            text = re.sub(r"\s+", " ", text)
 
             filepath_json = join(html_path, new_filename + ".json")
             filepath_html = join(html_path, new_filename + ".html")
@@ -68,7 +70,7 @@ def clean(text: str) -> str:
 
 
 re_ends_with_hyphen = re.compile(r"(?<=\w)-\s?$")
-re_ordered_list = re.compile(r"^(\d+|[IVX]+|[a-z])[).]\s")
+re_ordered_list = re.compile(r"^(?:(\d+|[IVX]+|[a-z])[).]|\[(\d+)\])\s")
 
 
 def extract_metadata(text: str) -> tuple[dict[str, str], str]:
@@ -151,14 +153,14 @@ class Concatenator:
 
     def flush(self):
         if self.line:
-            self.out.append("".join(self.line).strip())
+            self.out.append(" ".join(self.line).strip())
             self.line = []
         if self.image_buffer is not None:
             self.out.append(self.image_buffer)
             self.image_buffer = None
 
 
-def tag_html(lines: List[str]) -> list[str]:
+def tag_html(lines: list[str]) -> list[str]:
     out: List[str] = []
     numbered_list_types: list[str] = []
 
@@ -172,7 +174,7 @@ def tag_html(lines: List[str]) -> list[str]:
         match_numbered_list = re.search(re_ordered_list, part)
         is_numbered_list = match_numbered_list is not None
         if is_numbered_list:
-            list_index_str = match_numbered_list.group(1)  # type: ignore
+            list_index_str = match_numbered_list.group(1) or match_numbered_list.group(2)  # type: ignore
             if list_index_str.isnumeric():
                 list_type = "decimal"
                 list_index = int(list_index_str)
@@ -249,6 +251,48 @@ def fix_images(lines: list[str], image_path: str) -> list[str]:
         new_img = f'<img src="{image_url}" style="max-width:100%; height:auto;" />'
         new_line = f'<a href="{image_url}" target="_blank">{new_img}</a>'
         out.append(new_line)
+    return out
+
+
+def convert_footnotes(lines: list[str]) -> list[str]:
+    out_inverted: List[str] = []
+    footnotes: dict[int, str] = {}
+    finding_footnotes = True
+    for line in lines[::-1]:
+        match = re.search(r'^<li value="(\d+)"[^>]+>(.+)</li>$', line)
+        if match is None:
+            finding_footnotes = False
+        elif finding_footnotes:
+            footnote_index = int(match.group(1))
+            footnote_text = match.group(2)
+            line = line.replace("<li ", f'<li id="footnote-{footnote_index}" ')
+            if footnote_index in footnotes:
+                raise ValueError(f"Duplicate footnote: {footnote_index}")
+            footnotes[footnote_index] = footnote_text
+        out_inverted.append(line)
+
+    def func(_match: re.Match[str]) -> str:
+        idx = int(_match.group(1) or _match.group(3))
+        suffix = _match.group(2) or ""
+        for i in range(1, 4):
+            if not footnotes or idx == min(footnotes.keys()):
+                break
+            if idx == min(footnotes.keys()) + i:
+                # we are skipping some footnote
+                for _ in range(i):
+                    # print(f"Skipping footnote {min(footnotes.keys())}")
+                    footnotes.pop(min(footnotes.keys()))
+        if not footnotes or idx != min(footnotes.keys()) or idx not in footnotes:
+            return str(_match.group(0))
+        text = footnotes.pop(idx)
+        return f' <a href="#footnote-{idx}" title="{text}">[{idx}]</a>{suffix}'
+
+    out = []
+    for line in out_inverted[::-1]:
+        # Replace references to footnotes with links
+        line = re.sub(r" (\d{1,3})\)([\s.,])|\[(\d+)\]", func, line)
+        out.append(line)
+
     return out
 
 
