@@ -68,12 +68,12 @@ def extract_metadata(text: str) -> tuple[dict[str, str], str]:
         ("omschrijving", r"^<p>Omschrijving: ([^<]+)</p>"),
         ("afkomstig uit", r"^<p>Afkomstig uit: ([^<]+)</p>"),
     ]:
-        match = re.search(regex, text)
+        match = re.search(regex, text, re.IGNORECASE)
         if match is not None:
             metadata[field] = match.group(1)
         else:
             metadata[field] = ""
-        text = re.sub(regex, "", text)
+        text = re.sub(regex, "", text, re.IGNORECASE)
     return metadata, text
 
 
