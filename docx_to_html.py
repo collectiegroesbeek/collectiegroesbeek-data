@@ -1,4 +1,5 @@
 import argparse
+import html
 import json
 import os
 import posixpath
@@ -32,6 +33,7 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
                 os.rmdir(_image_path)
             text = result.value
             text = clean(text)
+            text = html.unescape(text)
             metadata, text = extract_metadata(text)
 
             lines = Concatenator().concatenate(text)
