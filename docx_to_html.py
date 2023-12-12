@@ -74,6 +74,7 @@ def extract_metadata(text: str) -> tuple[dict[str, str], str]:
         else:
             metadata[field] = ""
         text = re.sub(regex, "", text, re.IGNORECASE)
+    text = re.sub(r"<p>Tekst:\s?</p>", "", text, re.IGNORECASE)
     return metadata, text
 
 
@@ -106,14 +107,13 @@ class Concatenator:
             is_numbered_list = re.search(re_ordered_list, part) is not None
             is_title = i == 0
             is_heading = (
-                re.match(r"<strong>[,\w\d\s-]+<\/strong>[.\s]?", part) is not None or part.isupper()
+                re.match(r"^<strong>.+<\/strong>[.\s]*$", part) is not None or part.isupper()
             ) and i != len(parts) - 1
             if is_numbered_list or is_title or is_heading:
                 self.flush()
             if is_title or is_heading:
                 part = part.replace("<strong>", "").replace("</strong>", "")
-                if part.isupper():
-                    part = part.title()
+                part = part.title()
             if is_title:
                 part = "<h1>" + part + "</h1>"
             elif is_heading:
@@ -133,7 +133,7 @@ class Concatenator:
                 is_title
                 or is_heading
                 or is_image
-                or ((part_ends_with_punctiation or i < 5) and next_part_starts_with_capital_letter)
+                or ((part_ends_with_punctiation or i < 3) and next_part_starts_with_capital_letter)
             ):
                 self.flush()
         self.flush()
