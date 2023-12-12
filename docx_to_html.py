@@ -15,7 +15,7 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
     filenames = sorted(os.listdir(path))
     pbar = tqdm(filenames)
     for filename in pbar:
-        if filename.endswith(".docx") and "Teding" in filename:
+        if filename.endswith(".docx"):
             pbar.set_postfix(filename=filename)
             new_filename = filename.replace(".docx", "")
             _image_path = join(image_path, new_filename)
@@ -70,7 +70,7 @@ def clean(text: str) -> str:
 
 
 re_ends_with_hyphen = re.compile(r"(?<=\w)-\s?$")
-re_ordered_list = re.compile(r"^(\d+|[IVX]+|[a-z])[).]\s")
+re_ordered_list = re.compile(r"^(?:(\d+|[IVX]+|[a-z])[).]|\[(\d+)\])\s")
 
 
 def extract_metadata(text: str) -> tuple[dict[str, str], str]:
@@ -174,7 +174,7 @@ def tag_html(lines: list[str]) -> list[str]:
         match_numbered_list = re.search(re_ordered_list, part)
         is_numbered_list = match_numbered_list is not None
         if is_numbered_list:
-            list_index_str = match_numbered_list.group(1)  # type: ignore
+            list_index_str = match_numbered_list.group(1) or match_numbered_list.group(2)  # type: ignore
             if list_index_str.isnumeric():
                 list_type = "decimal"
                 list_index = int(list_index_str)
@@ -272,16 +272,17 @@ def convert_footnotes(lines: list[str]) -> list[str]:
         out_inverted.append(line)
 
     def func(_match: re.Match[str]) -> str:
-        idx = int(_match.group(1))
-        suffix = _match.group(2)
+        idx = int(_match.group(1) or _match.group(3))
+        suffix = _match.group(2) or ""
         for i in range(1, 4):
-            if idx == min(footnotes.keys()):
+            if not footnotes or idx == min(footnotes.keys()):
                 break
             if idx == min(footnotes.keys()) + i:
                 # we are skipping some footnote
                 for _ in range(i):
+                    # print(f"Skipping footnote {min(footnotes.keys())}")
                     footnotes.pop(min(footnotes.keys()))
-        if idx != min(footnotes.keys()) or idx not in footnotes:
+        if not footnotes or idx != min(footnotes.keys()) or idx not in footnotes:
             return str(_match.group(0))
         text = footnotes.pop(idx)
         return f' <a href="#footnote-{idx}" title="{text}">[{idx}]</a>{suffix}'
@@ -289,7 +290,7 @@ def convert_footnotes(lines: list[str]) -> list[str]:
     out = []
     for line in out_inverted[::-1]:
         # Replace references to footnotes with links
-        line = re.sub(r" (\d{1,3})\)([\s.,])", func, line)
+        line = re.sub(r" (\d{1,3})\)([\s.,])|\[(\d+)\]", func, line)
         out.append(line)
 
     return out
