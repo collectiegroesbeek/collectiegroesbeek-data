@@ -170,7 +170,7 @@ def tag_html(lines: list[str]) -> list[str]:
     for i, part in enumerate(lines):
         assert len(part) != 0
 
-        if part.startswith(("<img ", "<ul", "<ol", "<li")):
+        if part.startswith(("<img ", "<ul", "<ol", "<li", "<h")):
             out.append(part)
             continue
 
