@@ -3,6 +3,7 @@ import html
 import json
 import os
 import posixpath
+import shutil
 from posixpath import join
 import re
 from typing import Optional, List
@@ -13,6 +14,12 @@ from tqdm import tqdm
 
 
 def main(path: str, html_path: str, image_path: str, image_path_static: str):
+    shutil.rmtree(html_path, ignore_errors=True)
+    os.makedirs(html_path)
+    if image_path != html_path:
+        shutil.rmtree(image_path, ignore_errors=True)
+        os.makedirs(image_path)
+
     filenames = sorted(os.listdir(path))
     pbar = tqdm(filenames)
     for filename in pbar:
