@@ -1,4 +1,5 @@
 import argparse
+import glob
 import html
 import json
 import os
@@ -14,11 +15,16 @@ from tqdm import tqdm
 
 
 def main(path: str, html_path: str, image_path: str, image_path_static: str):
-    shutil.rmtree(html_path, ignore_errors=True)
-    os.makedirs(html_path)
-    if image_path != html_path:
-        shutil.rmtree(image_path, ignore_errors=True)
-        os.makedirs(image_path)
+    os.makedirs(html_path, exist_ok=True)
+    os.makedirs(image_path, exist_ok=True)
+
+    for _path in [html_path, image_path]:
+        for filepath in glob.glob(posixpath.join(_path, "*")):
+            if ".gitignore" not in filepath:
+                try:
+                    shutil.rmtree(filepath)
+                except NotADirectoryError:
+                    os.remove(filepath)
 
     filenames = sorted(os.listdir(path))
     pbar = tqdm(filenames)
