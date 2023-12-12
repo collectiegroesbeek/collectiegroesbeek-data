@@ -54,8 +54,10 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
             filepath_html = join(html_path, new_filename + ".html")
             with open(filepath_json, "w") as f:
                 json.dump(metadata, f)
+                f.write("\n")
             with open(filepath_html, "w", encoding="utf-8") as f:
                 f.write(text)
+                f.write("\n")
 
 
 def clean(text: str) -> str:
