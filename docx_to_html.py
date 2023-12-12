@@ -31,7 +31,6 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
             if len(os.listdir(_image_path)) == 0:
                 os.rmdir(_image_path)
             text = result.value
-            text = replace_characters(text)
             text = clean(text)
             metadata, text = extract_metadata(text)
 
@@ -48,20 +47,6 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
                 json.dump(metadata, f)
             with open(filepath_html, "w", encoding="utf-8") as f:
                 f.write(text)
-
-
-def replace_characters(text: str) -> str:
-    text = text.replace("„", "&bdquo;")
-    text = text.replace("”", "&rdquo;")
-    text = text.replace("“", "&ldquo;")
-    text = text.replace("±", "&#177;")
-    text = text.replace("é", "&eacute;")
-    text = text.replace("†", "&dagger;")
-    text = text.replace("ó", "&oacute;")
-    text = text.replace("½", "&frac12;")
-    text = text.replace("⅓", "&frac13;")
-    text = text.replace("ë", "&euml;")
-    return text
 
 
 def clean(text: str) -> str:
