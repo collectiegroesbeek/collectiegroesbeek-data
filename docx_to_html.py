@@ -66,6 +66,7 @@ def extract_metadata(text: str) -> tuple[dict[str, str], str]:
         ("titel", r"^<p>Titel: ([^<]+)</p>"),
         ("jaar", r"^<p>Jaar: ([^<]+)</p>"),
         ("omschrijving", r"^<p>Omschrijving: ([^<]+)</p>"),
+        ("afkomstig uit", r"^<p>Afkomstig uit: ([^<]+)</p>"),
     ]:
         match = re.search(regex, text)
         if match is not None:
