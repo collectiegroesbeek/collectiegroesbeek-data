@@ -7,7 +7,7 @@ import posixpath
 import shutil
 from posixpath import join
 import re
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 import mammoth
 from mammoth.cli import ImageWriter
@@ -81,6 +81,7 @@ def extract_metadata(text: str) -> tuple[dict[str, str], str]:
         ("titel", r"^<p>Titel: ([^<]+)</p>"),
         ("jaar", r"^<p>Jaar: ([^<]+)</p>"),
         ("omschrijving", r"^<p>Omschrijving: ([^<]+)</p>"),
+        ("categorie", r"^<p>Categorie: ([^<]+)</p>"),
         ("afkomstig uit", r"^<p>Afkomstig uit: ([^<]+)</p>"),
     ]:
         match = re.search(regex, text, flags=re.IGNORECASE)
@@ -100,18 +101,32 @@ class Concatenator:
         self.out: List[str] = []
         self.line: List[str] = []
         self.image_buffer: Optional[str] = None
+        self.line_tags: Optional[Tuple[str, str]] = None
 
     def concatenate(self, text: str) -> List[str]:
         parts = text.split("</p><p>")
         for i, part in enumerate(parts):
-            part_is_empty = len(part.strip()) == 0
+            part = part.strip()
+            part_is_empty = len(part) == 0
             if part_is_empty:
                 self.flush()
                 continue
 
+            if part.startswith("<em>") and part.endswith("</em>"):
+                part = part[4:-5].strip()
+                self.line_tags = ("<em>", "</em>")
+            previous_part = parts[i - 1] if i > 0 else None
+            if previous_part is not None:
+                previous_part = previous_part.replace("<em>", "").replace("</em>", "").strip()
+            next_part = parts[i + 1] if i < len(parts) - 1 else None
+            if next_part is not None:
+                next_part = next_part.replace("<em>", "").replace("</em>", "").strip()
+
             is_image = part.startswith("<img ") and part.endswith(">")
             if is_image:
                 self.image_buffer = part
+                if not self.line:
+                    self.flush()
                 continue
 
             if i == 0 and part.startswith("<p>"):
@@ -124,6 +139,7 @@ class Concatenator:
             is_heading = (
                 re.match(r"^<strong>.+<\/strong>[.\s]*$", part) is not None or part.isupper()
             ) and i != len(parts) - 1
+
             if is_numbered_list or is_title or is_heading:
                 self.flush()
             if is_title or is_heading:
@@ -135,7 +151,8 @@ class Concatenator:
                 part = "<h2>" + part + "</h2>"
 
             previous_ends_with_hyphen = (
-                i > 0 and re.search(re_ends_with_hyphen, parts[i - 1]) is not None
+                previous_part is not None
+                and re.search(re_ends_with_hyphen, previous_part) is not None
             )
             if previous_ends_with_hyphen:
                 self.line[-1] = re.sub(re_ends_with_hyphen, part, self.line[-1])
@@ -143,12 +160,16 @@ class Concatenator:
                 self.line.append(part)
 
             part_ends_with_punctiation = re.search(r"[.!?]\s?$", part) is not None
-            next_part_starts_with_capital_letter = i < len(parts) - 1 and parts[i + 1][0].isupper()
+            next_part_starts_with_capital_letter = next_part and next_part[0].isupper()
+            next_part_is_image = next_part is not None and next_part.startswith("<img ")
             if (
                 is_title
                 or is_heading
                 or is_image
-                or ((part_ends_with_punctiation or i < 3) and next_part_starts_with_capital_letter)
+                or (
+                    (part_ends_with_punctiation or i < 3)
+                    and (next_part_starts_with_capital_letter or next_part_is_image)
+                )
             ):
                 self.flush()
         self.flush()
@@ -156,7 +177,11 @@ class Concatenator:
 
     def flush(self):
         if self.line:
-            self.out.append(" ".join(self.line).strip())
+            line = " ".join(self.line).strip()
+            if self.line_tags is not None:
+                line = self.line_tags[0] + line + self.line_tags[1]
+                self.line_tags = None
+            self.out.append(line)
             self.line = []
         if self.image_buffer is not None:
             self.out.append(self.image_buffer)
@@ -165,10 +190,15 @@ class Concatenator:
 
 def tag_html(lines: list[str]) -> list[str]:
     out: List[str] = []
-    numbered_list_types: list[str] = []
+    numbered_list_types: list[str] = []  # keep track of lists we are currently in
 
     for i, part in enumerate(lines):
         assert len(part) != 0
+
+        if numbered_list_types and part.startswith("<img "):
+            # an image can't be part of a list, so first close the open list
+            out.append("</ol>")
+            numbered_list_types.pop()
 
         if part.startswith(("<img ", "<ul", "<ol", "<li", "<h")):
             out.append(part)
