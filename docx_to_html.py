@@ -53,8 +53,6 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
             lines = tag_html(lines)
             lines = convert_footnotes(lines)
             lines = fix_images(lines, image_path=join(image_path_static, new_filename))
-            text = "\n".join(lines)
-            text = re.sub(r"\s+", " ", text)
 
             filepath_json = join(html_path, new_filename + ".json")
             filepath_html = join(html_path, new_filename + ".html")
@@ -62,12 +60,14 @@ def main(path: str, html_path: str, image_path: str, image_path_static: str):
                 json.dump(metadata, f)
                 f.write("\n")
             with open(filepath_html, "w", encoding="utf-8") as f:
-                f.write(text)
-                f.write("\n")
+                for line in lines:
+                    f.write(line)
+                    f.write("\n")
 
 
 def clean(text: str) -> str:
     text = text.replace("<strong> </strong>", " ")
+    text = re.sub(r"\s+", " ", text)
     return text
 
 
@@ -234,6 +234,11 @@ def roman_numeral_to_integer(value: str) -> int:
         "VIII": 8,
         "IX": 9,
         "X": 10,
+        "XI": 11,
+        "XII": 12,
+        "XIII": 13,
+        "XIV": 14,
+        "XV": 15,
     }[value.upper()]
 
 
