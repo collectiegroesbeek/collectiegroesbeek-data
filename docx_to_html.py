@@ -78,11 +78,11 @@ re_ordered_list = re.compile(r"^(?:(\d+|[IVX]+|[a-z])[).]|\[(\d+)\])\s")
 def extract_metadata(text: str) -> tuple[dict[str, str], str]:
     metadata: dict[str, str] = {}
     for field, regex in [
-        ("titel", r"^<p>Titel: ([^<]+)</p>"),
-        ("jaar", r"^<p>Jaar: ([^<]+)</p>"),
-        ("omschrijving", r"^<p>Omschrijving: ([^<]+)</p>"),
-        ("categorie", r"^<p>Categorie: ([^<]+)</p>"),
-        ("afkomstig uit", r"^<p>Afkomstig uit: ([^<]+)</p>"),
+        ("titel", r"^<p>Titel: (.+?)</p>"),
+        ("jaar", r"^<p>Jaar: (.+?)</p>"),
+        ("omschrijving", r"^<p>Omschrijving: (.+?)</p>"),
+        ("categorie", r"^<p>Categorie: (.+?)</p>"),
+        ("afkomstig uit", r"^<p>Afkomstig uit: (.+?)</p>"),
     ]:
         match = re.search(regex, text, flags=re.IGNORECASE)
         if match is not None:
@@ -124,6 +124,8 @@ class Concatenator:
 
             is_image = part.startswith("<img ") and part.endswith(">")
             if is_image:
+                if self.image_buffer:
+                    self.flush()
                 self.image_buffer = part
                 if not self.line:
                     self.flush()
@@ -137,7 +139,8 @@ class Concatenator:
             is_numbered_list = re.search(re_ordered_list, part) is not None
             is_title = i == 0
             is_heading = (
-                re.match(r"^<strong>.+<\/strong>[.\s]*$", part) is not None or part.isupper()
+                re.match(r"^<strong>.+<\/strong>[.\s]*$", part) is not None
+                or (part.isupper() and not is_numbered_list)
             ) and i != len(parts) - 1
 
             if is_numbered_list or is_title or is_heading:
@@ -195,8 +198,8 @@ def tag_html(lines: list[str]) -> list[str]:
     for i, part in enumerate(lines):
         assert len(part) != 0
 
-        if numbered_list_types and part.startswith("<img "):
-            # an image can't be part of a list, so first close the open list
+        if numbered_list_types and part.startswith(("<img ", "<h")):
+            # an image or heading can't be part of a list, so first close the open list
             out.append("</ol>")
             numbered_list_types.pop()
 
@@ -287,7 +290,7 @@ def fix_images(lines: list[str], image_path: str) -> list[str]:
             re.search(r"src=\"([^\"]+)\"", line).group(1),  # type: ignore
         )
         new_img = f'<img src="{image_url}" style="max-width:100%; height:auto;" />'
-        new_line = f'<a href="{image_url}" target="_blank">{new_img}</a>'
+        new_line = f'<p><a href="{image_url}" target="_blank">{new_img}</a></p>'
         out.append(new_line)
     return out
 
