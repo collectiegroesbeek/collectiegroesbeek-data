@@ -86,7 +86,7 @@ def extract_metadata(text: str) -> tuple[dict[str, str], str]:
     ]:
         match = re.search(regex, text, flags=re.IGNORECASE)
         if match is not None:
-            metadata[field] = match.group(1)
+            metadata[field] = match.group(1).strip()
         else:
             metadata[field] = ""
         text = re.sub(regex, "", text, flags=re.IGNORECASE)
